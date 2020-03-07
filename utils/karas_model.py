@@ -113,7 +113,6 @@ if __name__=="__main__":
     memory = SequentialMemory(limit=args.memory_limit, window_length=args.window_length)
     processor = RaceCarEnvProcessor(actions=actions)
 
-    print("Here")
     dqn = DQNAgent(
         model=model,
         nb_actions=n_actions,
