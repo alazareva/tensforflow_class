@@ -1,0 +1,4 @@
+tensorflow
+pandas
+numpy
+gym[box2d]
