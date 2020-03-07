@@ -16,7 +16,7 @@ from tensorflow.python.framework.ops import disable_eager_execution
 INPUT_SHAPE = (96, 96)
 WINDOW_LENGTH = 10
 MEMORY_LIMIT = 1000000
-WARMUP_STEPS = 50000
+WARMUP_STEPS = 20000
 TARGET_MODEL_UPDATE = 10000
 LEARNING_RATE = .00025
 TRAIN_INTERVAL = 4
@@ -44,10 +44,10 @@ def construct_action_space(n_steering, n_gas, n_brake):
     steering_actions = np.zeros((n_steering, 3))
     steering_actions[:, 0] = np.linspace(-1.0, 1.0, n_steering)
     gas_actions = np.zeros((n_gas, 3))
-    gas_actions[:, 1] = np.linspace(0, 1.0, n_gas)
+    gas_actions[:, 1] = np.linspace(5, 1.0, n_gas)
     brake_actions = np.zeros((n_brake, 3))
-    brake_actions[:, 2] = np.linspace(0, 1.0, n_brake)
-    return  np.vstack([steering_actions, gas_actions, brake_actions])
+    brake_actions[:, 2] = np.linspace(5, 1.0, n_brake)
+    return np.vstack([steering_actions, gas_actions, brake_actions])
 
 
 def construct_model(window_length, n_actions):
@@ -94,12 +94,13 @@ if __name__=="__main__":
     disable_eager_execution()
 
     actions = construct_action_space(
-        n_steering=20,
-        n_gas=10,
-        n_brake=10,
+        n_steering=5,
+        n_gas=2,
+        n_brake=2,
     )
 
     n_actions = len(actions)
+    print(actions)
 
     model = construct_model(args.window_length, n_actions)
 
