@@ -21,6 +21,7 @@ TARGET_MODEL_UPDATE = 10000
 LEARNING_RATE = .00025
 TRAIN_INTERVAL = 4
 STEPS = 1750000
+EVALUATION_EPISODES = 5
 
 
 class RaceCarEnvProcessor(Processor):
@@ -71,7 +72,7 @@ def construct_model(window_length, n_actions):
 
 
 # python utils/karas_model.py --steps=100
-# python utils/karas_model.py --mode=test
+# python utils/karas_model.py --mode=test --evaluation_episodes=2
 
 if __name__=="__main__":
 
@@ -87,6 +88,7 @@ if __name__=="__main__":
     parser.add_argument('--learning_rate', type=float, default=LEARNING_RATE)
     parser.add_argument('--train_interval', type=int, default=TRAIN_INTERVAL)
     parser.add_argument('--steps', type=int, default=STEPS)
+    parser.add_argument('--evaluation_episodes', type=int, default=EVALUATION_EPISODES)
     args = parser.parse_args()
 
     disable_eager_execution()
@@ -139,10 +141,11 @@ if __name__=="__main__":
         dqn.fit(env, callbacks=callbacks, nb_steps=args.steps, visualize=False, verbose=2)
         dqn.save_weights(weights_filename, overwrite=True)
 
-        # Finally, evaluate our algorithm for 10 episodes.
-        dqn.test(env, nb_episodes=5, visualize=False)
+        dqn.test(env, nb_episodes=args.evaluation_episodes, visualize=False)
+        env.close()
 
     elif args.mode == 'test':
         weights_filename = 'dqn_{}_weights.h5f'.format(env_name)
         dqn.load_weights(weights_filename)
-        dqn.test(env, nb_episodes=5, visualize=True)
+        dqn.test(env, nb_episodes=args.evaluation_episodes, visualize=True)
+        env.close()
