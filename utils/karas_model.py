@@ -83,7 +83,7 @@ def get_bottom_bar(img):
     x_end = int((30 + 0.4 * velocity_mul)) * s
     velocity = black_and_white[:, x_start: x_end].mean()
 
-    return np.array([speed, wheel_0, wheel_1, wheel_2, wheel_3, angle, velocity, is_off_track])
+    return np.array([speed, wheel_0, wheel_1, wheel_2, wheel_3, angle, velocity]) # is_off_track
 
 
 class CarActionWrapper(ActionWrapper):
@@ -124,7 +124,7 @@ class CarObservationWrapper(ObservationWrapper):
         threshold = 150
         image = (image > threshold).astype('uint8') * 255
         padding = np.zeros(image.shape[1] - indicators.shape[0])
-        other_info = np.concatenate([indicators, padding])
+        other_info = np.concatenate([padding, indicators])  #  np.concatenate([indicators, padding])
         return np.vstack([image, other_info]) #observation.dot(rgb_weights)
 
 
@@ -259,7 +259,7 @@ def construct_bi_model_simple(window_length, n_actions):
     permute = Permute((2, 3, 1))(observation_input)
 
     image_slice = Cropping2D(cropping=((0, 1), (0, 0)))(permute)
-    other_slice = Cropping2D(cropping=((h, 0), (0, w - OTHER_INDICATORS)))(permute)
+    other_slice = Cropping2D(cropping=((h, 0), (0, 0)))(permute) # Cropping2D(cropping=((h, 0), (0, w - OTHER_INDICATORS)))(permute)
 
     image_slice = Convolution2D(32, (8, 8), strides=(4, 4), activation='relu', kernel_initializer=GlorotNormal())(image_slice)
     image_slice = Convolution2D(32, (4, 4), strides=(2, 2), activation='relu', kernel_initializer=GlorotNormal())(image_slice)
