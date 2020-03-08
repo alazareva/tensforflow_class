@@ -295,7 +295,7 @@ class SimpleBiModelV1:
         )(other_slice)
         other_slice = Flatten(name='flatten_indicators')(other_slice)
 
-        conact = Concatenate('concat_all')([image_slice, other_slice])
+        conact = Concatenate(name='concat_all')([image_slice, other_slice])
 
         out = Dense(
             units=n_actions,
