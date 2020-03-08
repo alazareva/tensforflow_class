@@ -1,4 +1,5 @@
 tensorflow
+tf-agents
 pandas
 numpy
 gym[box2d]
