@@ -44,7 +44,7 @@ def off_track(state):
 
 
 def get_bottom_bar(img):
-    is_off_track = int(off_track(img))
+    #off_track = off_track(img)
     h, w, _ = img.shape
     s = int(w / 40.0)
     h = h / 40.0
@@ -239,7 +239,7 @@ def construct_bi_model(window_length, n_actions):
     image_slice = Flatten()(image_slice)
     image_slice = Dense(512, activation='relu', kernel_initializer=GlorotNormal())(image_slice)
 
-    other_slice = Dense(256, activation='relu', kernel_initializer=GlorotNormal())(other_slice)
+    #other_slice = Dense(256, activation='relu', kernel_initializer=GlorotNormal())(other_slice)
     other_slice = Flatten()(other_slice)
 
     final = Concatenate()([image_slice, other_slice])
@@ -273,9 +273,9 @@ def construct_bi_model_simple(window_length, n_actions):
 
     conact = Concatenate()([image_slice, other_slice])
 
-    out = Dense(256, activation='relu', kernel_initializer=GlorotNormal())(conact)
+    #out = Dense(256, activation='relu', kernel_initializer=GlorotNormal())(conact)
 
-    out = Dense(n_actions, activation='linear', kernel_initializer=GlorotNormal())(out)
+    out = Dense(n_actions, activation='linear', kernel_initializer=GlorotNormal())(conact)
     model = Model(inputs=observation_input, outputs=out)
     print(model.summary())
     return model
