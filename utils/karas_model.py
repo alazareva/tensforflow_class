@@ -30,6 +30,8 @@ TRAIN_INTERVAL = 4
 STEPS = 1750000
 EVALUATION_EPISODES = 5
 
+OTHER_INDICATORS = 8
+
 # Determines if the car is in the grass (specific to CarRacing)
 # Parameters:
 # - state: A (nxmx1) image representing the current frame of the game
@@ -44,7 +46,7 @@ def off_track(state):
 
 
 def get_bottom_bar(img):
-    #off_track = off_track(img)
+    is_off_track = int(off_track(img))
     h, w, _ = img.shape
     s = int(w / 40.0)
     h = h / 40.0
@@ -81,7 +83,7 @@ def get_bottom_bar(img):
     x_end = int((30 + 0.4 * velocity_mul)) * s
     velocity = black_and_white[:, x_start: x_end].mean()
 
-    return np.array([speed, wheel_0, wheel_1, wheel_2, wheel_3, angle, velocity])
+    return np.array([speed, wheel_0, wheel_1, wheel_2, wheel_3, angle, velocity, is_off_track])
 
 
 class CarActionWrapper(ActionWrapper):
@@ -116,14 +118,13 @@ class CarObservationWrapper(ObservationWrapper):
         '''
         rgb_weights = [0.2989, 0.5870, 0.1140]
         indicators = get_bottom_bar(observation)
+        assert len(indicators) == OTHER_INDICATORS, f'Number of other indicators must be {OTHER_INDICATORS}'
 
         image = grayscale_img(observation)
         threshold = 150
         image = (image > threshold).astype('uint8') * 255
-
-        #other_info = np.full(image.shape[1] - indicators.shape[0], int(off_track(observation)))
-        other_info = np.zeros(image.shape[1] - indicators.shape[0])
-        other_info = np.concatenate([other_info, indicators])
+        padding = np.zeros(image.shape[1] - indicators.shape[0])
+        other_info = np.concatenate([indicators, padding])
         return np.vstack([image, other_info]) #observation.dot(rgb_weights)
 
 
@@ -239,7 +240,7 @@ def construct_bi_model(window_length, n_actions):
     image_slice = Flatten()(image_slice)
     image_slice = Dense(512, activation='relu', kernel_initializer=GlorotNormal())(image_slice)
 
-    #other_slice = Dense(256, activation='relu', kernel_initializer=GlorotNormal())(other_slice)
+    other_slice = Dense(256, activation='relu', kernel_initializer=GlorotNormal())(other_slice)
     other_slice = Flatten()(other_slice)
 
     final = Concatenate()([image_slice, other_slice])
@@ -258,7 +259,7 @@ def construct_bi_model_simple(window_length, n_actions):
     permute = Permute((2, 3, 1))(observation_input)
 
     image_slice = Cropping2D(cropping=((0, 1), (0, 0)))(permute)
-    other_slice = Cropping2D(cropping=((h, 0), (0, 0)))(permute)
+    other_slice = Cropping2D(cropping=((h, 0), (0, w - OTHER_INDICATORS)))(permute)
 
     image_slice = Convolution2D(32, (8, 8), strides=(4, 4), activation='relu', kernel_initializer=GlorotNormal())(image_slice)
     image_slice = Convolution2D(32, (4, 4), strides=(2, 2), activation='relu', kernel_initializer=GlorotNormal())(image_slice)
@@ -266,16 +267,15 @@ def construct_bi_model_simple(window_length, n_actions):
     image_slice = Flatten()(image_slice)
     image_slice = Dense(512, activation='relu', kernel_initializer=GlorotNormal())(image_slice)
 
-    other_slice = Dense(128, activation='relu', kernel_initializer=GlorotNormal())(other_slice)
-    other_slice = Dense(64, activation='relu',
-                        kernel_initializer=GlorotNormal())(other_slice)
+    other_slice = Dense(64, activation='relu', kernel_initializer=GlorotNormal())(other_slice)
+    other_slice = Dense(32, activation='relu', kernel_initializer=GlorotNormal())(other_slice)
     other_slice = Flatten()(other_slice)
 
     conact = Concatenate()([image_slice, other_slice])
 
-    #out = Dense(256, activation='relu', kernel_initializer=GlorotNormal())(conact)
+    out = Dense(256, activation='relu', kernel_initializer=GlorotNormal())(conact)
 
-    out = Dense(n_actions, activation='linear', kernel_initializer=GlorotNormal())(conact)
+    out = Dense(n_actions, activation='linear', kernel_initializer=GlorotNormal())(out)
     model = Model(inputs=observation_input, outputs=out)
     print(model.summary())
     return model
