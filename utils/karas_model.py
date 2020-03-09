@@ -395,7 +395,7 @@ if __name__=="__main__":
         weights_filename = f'{model_name}/dqn_{env_name}_weights.h5f'
         checkpoint_weights_filename = f'{model_name}/dqn_' + env_name + '_weights_{step}.h5f'
         log_filename = f'{model_name}/' + 'dqn_{}_log.json'.format(env_name)
-        callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=250000)]
+        callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=100000)]
         callbacks += [FileLogger(log_filename, interval=100)]
         agent.fit(env, callbacks=callbacks, nb_steps=args.steps, visualize=False, verbose=2)
         agent.save_weights(weights_filename, overwrite=True)
