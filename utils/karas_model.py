@@ -1,20 +1,24 @@
 import argparse
-import logging
-import gym
-import numpy as np
-from rl.agents.dqn import DQNAgent
+import warnings
 
-from rl.callbacks import FileLogger, ModelIntervalCheckpoint
-from rl.memory import SequentialMemory
-from rl.policy import EpsGreedyQPolicy, LinearAnnealedPolicy
-from tensorflow.keras.layers import Dense, Activation, Flatten, \
-    Convolution2D, Permute, Input, Concatenate, Lambda, Add, Cropping2D, Concatenate
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.python.framework.ops import disable_eager_execution
-from tensorflow.keras.initializers import GlorotNormal
+import gym
 from gym import ActionWrapper, ObservationWrapper
 from gym.spaces import Discrete, Box
+import numpy as np
+from rl.agents.dqn import DQNAgent
+from rl.callbacks import FileLogger, ModelIntervalCheckpoint, Callback
+from rl.memory import SequentialMemory
+from rl.policy import EpsGreedyQPolicy
+import tensorflow as tf
+from tensorflow.keras.initializers import GlorotNormal
+from tensorflow.keras.layers import Dense, Flatten, \
+    Convolution2D, Permute, Input, Cropping2D, Concatenate
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.python.framework.ops import disable_eager_execution
+from tensorflow.python.ops import summary_ops_v2
+from tensorflow.python.keras import backend as K
+from tensorflow.python.eager import context
 
 INPUT_SHAPE = (96, 96)
 WINDOW_LENGTH = 10
@@ -25,11 +29,6 @@ LEARNING_RATE = .00025
 TRAIN_INTERVAL = 4
 STEPS = 1750000
 EVALUATION_EPISODES = 5
-
-MODEL_DIR = 'default'
-
-MODEL_V2_NAME = 'simple_bi_v2'
-MODEL_V1_NAME = 'simple_bi_v1'
 
 
 def get_off_track(state):
@@ -143,6 +142,7 @@ class CarObservationWrapperV1(ObservationWrapper):
         padding = np.zeros(image.shape[1] - indicators.shape[0])
         other_info = np.concatenate([padding, indicators])
         return np.vstack([image, other_info])
+
 
 class SimpleBiModelV2:
     OTHER_INDICATORS = 8
@@ -323,9 +323,79 @@ def get_model_builder(model_name):
 # python utils/karas_model.py --steps=100
 # python utils/karas_model.py --mode=test --evaluation_episodes=2
 
-if __name__=="__main__":
+from datetime import datetime
+class TrainTensorboardCallback(Callback):
+    def __init__(self, log_dir='tf_logs'):
+        # Some algorithms compute multiple episodes at once since they are multi-threaded.
+        # We therefore use a dictionary that is indexed by the episode to separate episodes
+        # from each other.
+        self.observations = {}
+        self.rewards = {}
+        self.actions = {}
+        self.metrics = {}
+        self.step = 0
+        logs = f'{log_dir}/{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        self.writer = tf.summary.create_file_writer(logdir=logs)
 
-    disable_eager_execution()
+    def on_train_begin(self, logs):
+        self.metrics_names = self.model.metrics_names
+
+    def on_train_end(self, logs):
+        self.writer.close()
+
+    def on_episode_begin(self, episode, logs):
+        """ Reset environment variables at beginning of each episode """
+        self.observations[episode] = []
+        self.rewards[episode] = []
+        self.actions[episode] = []
+        self.metrics[episode] = []
+
+    def on_episode_end(self, episode, logs):
+        """ Compute and print training statistics of the episode when done """
+        if self.metrics[episode]:
+            metrics = np.array(self.metrics[episode])
+            with warnings.catch_warnings():
+                warnings.filterwarnings('error')
+                for idx, name in enumerate(self.metrics_names):
+                    try:
+                        value = np.nanmean(metrics[:, idx])
+                        self._log_scalars([(name, value)], episode=episode + 1)
+                    except Warning:
+                        pass
+
+        #with self.writer.as_default():
+            #tf.summary.scalar('episode_reward', np.sum(self.rewards[episode]), step=episode + 1)
+            #tf.summary.scalar('reward_mean', np.mean(self.rewards[episode]), step=episode + 1)
+        self._log_scalars(
+            logs=[('episode_reward', np.sum(self.rewards[episode])),
+                  ('reward_mean', np.mean(self.rewards[episode]))
+                  ],
+            episode=episode+1,
+        )
+
+        # Free up resources.
+        del self.observations[episode]
+        del self.rewards[episode]
+        del self.actions[episode]
+        del self.metrics[episode]
+
+    def _log_scalars(self, logs, episode):
+        with summary_ops_v2.always_record_summaries():
+            with self.writer.as_default():
+                for (name, value) in logs:
+                    tf.summary.scalar(name, value, step=episode)
+
+    def on_step_end(self, step, logs):
+        """ Update statistics of episode after each step """
+        episode = logs['episode']
+        self.observations[episode].append(logs['observation'])
+        self.rewards[episode].append(logs['reward'])
+        self.actions[episode].append(logs['action'])
+        if 'metrics' in logs:
+            self.metrics[episode].append(logs['metrics'])
+        self.step += 1
+
+if __name__=="__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['train', 'test'], default='train')
@@ -349,6 +419,8 @@ if __name__=="__main__":
     env_name = 'CarRacing-v0'
     env = CarActionWrapper(observation_wrapper(gym.make(env_name)))
 
+    from tensorflow.keras.callbacks import TensorBoard
+
     n_actions = len(CarActionWrapper.ACTIONS)
 
     policy = EpsGreedyQPolicy(eps=0.05)
@@ -364,6 +436,13 @@ if __name__=="__main__":
     memory = SequentialMemory(limit=args.memory_limit, window_length=args.window_length)
 
     model = model_builder().get_model(args.window_length, n_actions)
+
+    tb_log_dir = 'tensorboard'
+    tb_logs = f'{tb_log_dir}/{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+    graph_dir = f'{tb_logs}/graph'
+    writer = tf.summary.create_file_writer(logdir=graph_dir)
+    with writer.as_default():
+        summary_ops_v2.graph(K.get_graph(), step=0)
 
     agent = DQNAgent(
         model=model,
@@ -391,12 +470,15 @@ if __name__=="__main__":
         if not os.path.exists(model_weight_dir):
             os.makedirs(model_weight_dir)
 
+        tb_metrics_logs = f'{tb_logs}/train'
+
         # TODO add tensorboard callbacks
         weights_filename = f'{model_name}/dqn_{env_name}_weights.h5f'
         checkpoint_weights_filename = f'{model_name}/dqn_' + env_name + '_weights_{step}.h5f'
         log_filename = f'{model_name}/' + 'dqn_{}_log.json'.format(env_name)
         callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=100000)]
         callbacks += [FileLogger(log_filename, interval=100)]
+        callbacks += [TrainTensorboardCallback(log_dir=tb_metrics_logs)]
         agent.fit(env, callbacks=callbacks, nb_steps=args.steps, visualize=False, verbose=2)
         agent.save_weights(weights_filename, overwrite=True)
 
@@ -404,8 +486,10 @@ if __name__=="__main__":
         env.close()
 
     elif args.mode == 'test':
+        tb_metrics_logs = f'{tb_logs}/test'
         weight_dir = args.load_weights_from or model_name
         weights_filename = f'{weight_dir}/' + 'dqn_{}_weights.h5f'.format(env_name)
         agent.load_weights(weights_filename)
-        agent.test(env, nb_episodes=args.evaluation_episodes, visualize=True)
+        callbacks = [TrainTensorboardCallback(log_dir=tb_metrics_logs)]
+        agent.test(env, nb_episodes=args.evaluation_episodes, visualize=True, callbacks=callbacks)
         env.close()
