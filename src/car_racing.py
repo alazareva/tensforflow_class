@@ -252,8 +252,8 @@ class TensorboardCallback(Callback):
         self.step += 1
 
 
-# python utils/karas_model.py --steps=100
-# python utils/karas_model.py --mode=test --evaluation_episodes=2
+# python src/car_racing.py --steps=100
+# python src/car_racing.py --mode=test --evaluation_episodes=2
 
 if __name__=="__main__":
 
