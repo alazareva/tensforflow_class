@@ -1,20 +1,23 @@
 import argparse
-import logging
-import gym
-import numpy as np
-from rl.agents.dqn import DQNAgent
+from datetime import datetime
+import warnings
 
-from rl.callbacks import FileLogger, ModelIntervalCheckpoint
-from rl.memory import SequentialMemory
-from rl.policy import EpsGreedyQPolicy, LinearAnnealedPolicy
-from tensorflow.keras.layers import Dense, Activation, Flatten, \
-    Convolution2D, Permute, Input, Concatenate, Lambda, Add, Cropping2D, Concatenate
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.python.framework.ops import disable_eager_execution
-from tensorflow.keras.initializers import GlorotNormal
+import gym
 from gym import ActionWrapper, ObservationWrapper
 from gym.spaces import Discrete, Box
+import numpy as np
+from rl.agents.dqn import DQNAgent
+from rl.callbacks import FileLogger, ModelIntervalCheckpoint, Callback
+from rl.memory import SequentialMemory
+from rl.policy import EpsGreedyQPolicy
+import tensorflow as tf
+from tensorflow.keras.initializers import GlorotNormal
+from tensorflow.keras.layers import Dense, Flatten, \
+    Convolution2D, Permute, Input, Cropping2D, Concatenate
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.python.keras import backend as K
+from tensorflow.python.ops import summary_ops_v2
 
 INPUT_SHAPE = (96, 96)
 WINDOW_LENGTH = 10
@@ -26,17 +29,10 @@ TRAIN_INTERVAL = 4
 STEPS = 1750000
 EVALUATION_EPISODES = 5
 
-MODEL_DIR = 'default'
+MODEL_NAME = 'simple_bi_model'
 
-MODEL_V2_NAME = 'simple_bi_v2'
-MODEL_V1_NAME = 'simple_bi_v1'
-
-
-def get_off_track(state):
-    cropped = state[66:78, 43:53]
-    green = np.sum(cropped[..., 1] >= 204)
-    return int(green >= 45)
-
+def grayscale_img(image):
+    return np.dot(image[..., :3], [0.299, 0.587, 0.114])
 
 def get_bottom_bar_indicators(img):
     h, w, _ = img.shape
@@ -96,38 +92,11 @@ class CarActionWrapper(ActionWrapper):
     def reverse_action(self, action):
         pass
 
-def grayscale_img(image):
-    return np.dot(image[..., :3], [0.299, 0.587, 0.114])
-
-class CarObservationWrapperV2(ObservationWrapper):
-    OTHER_INDICATORS = 8
-
-    def __index__(self, env):
-        super(CarObservationWrapperV2, self).__init__(env)
-        h, w = INPUT_SHAPE
-        self.observation_space = Box(low=0, high=255, shape=(h + 1, w),
-                                     dtype=np.uint8)
-
-    def observation(self, observation):
-        indicators = get_bottom_bar_indicators(observation)
-        is_off_track = get_off_track(observation)
-        indicators = np.insert(indicators, 0, is_off_track)
-        assert len(
-            indicators) == self.OTHER_INDICATORS, f'Number of other indicators must be {self.OTHER_INDICATORS}'
-
-        image = grayscale_img(observation)
-        threshold = 150
-        image = (image > threshold).astype('uint8') * 255
-        padding = np.zeros(image.shape[1] - indicators.shape[0])
-        other_info = np.concatenate([indicators, padding])
-        return np.vstack([image, other_info])
-
-
-class CarObservationWrapperV1(ObservationWrapper):
+class CarObservationWrapper(ObservationWrapper):
     OTHER_INDICATORS = 7
 
     def __index__(self, env):
-        super(CarObservationWrapperV1, self).__init__(env)
+        super(CarObservationWrapper, self).__init__(env)
         h, w = INPUT_SHAPE
         self.observation_space = Box(low=0, high=255, shape=(h + 1, w),
                                      dtype=np.uint8)
@@ -144,98 +113,9 @@ class CarObservationWrapperV1(ObservationWrapper):
         other_info = np.concatenate([padding, indicators])
         return np.vstack([image, other_info])
 
-class SimpleBiModelV2:
-    OTHER_INDICATORS = 8
-
-    def get_model(self, window_length, n_actions):
-        h, w = INPUT_SHAPE
-        obs_shape = (window_length, h + 1, w)
-
-        observation_input = Input(shape=obs_shape, name='observation_input')
-        permute = Permute((2, 3, 1))(observation_input)
-
-        image_slice = Cropping2D(
-            cropping=((0, 1), (0, 0)),
-            name='crop_image'
-        )(permute)
-        other_slice = Cropping2D(
-            cropping=((h, 0), (0, w - self.OTHER_INDICATORS)),
-            name='crop_other_indicators',
-        )(permute)
-
-        image_slice = Convolution2D(
-            filters=32,
-            kernel_size=(8, 8),
-            strides=(4, 4),
-            activation='relu',
-            kernel_initializer=GlorotNormal(),
-            name='conv_1',
-        )(image_slice)
-
-        image_slice = Convolution2D(
-            filters=32,
-            kernel_size=(4, 4),
-            strides=(2, 2),
-            activation='relu',
-            kernel_initializer=GlorotNormal(),
-            name='conv_2',
-        )(image_slice)
-
-        image_slice = Convolution2D(
-            filters=32,
-            kernel_size=(3, 3),
-            strides=(1, 1),
-            activation='relu',
-            kernel_initializer=GlorotNormal(),
-            name='conv_3',
-        )(image_slice)
-
-        image_slice = Flatten(name='flatten_image')(image_slice)
-        image_slice = Dense(
-            units=512,
-            activation='relu',
-            kernel_initializer=GlorotNormal(),
-            name='image_dense_1',
-        )(image_slice)
-
-        other_slice = Dense(
-            units=128,
-            activation='relu',
-            kernel_initializer=GlorotNormal(),
-            name='indicators_dense_1',
-        )(other_slice)
-        other_slice = Dense(
-            units=64,
-            activation='relu',
-            kernel_initializer=GlorotNormal(),
-            name='indicators_dense_2',
-        )(other_slice)
-
-        other_slice = Flatten(name='flatten_indicators')(other_slice)
-
-        conact = Concatenate(name='concat_flat')([image_slice, other_slice])
-
-        out = Dense(
-            units=256,
-            activation='relu',
-            kernel_initializer=GlorotNormal(),
-            name='dense_all'
-        )(conact)
-
-        out = Dense(
-            units=n_actions,
-            activation='linear',
-            kernel_initializer=GlorotNormal(),
-            name='output',
-        )(out)
-        model = Model(inputs=observation_input, outputs=out, name=MODEL_V2_NAME)
-        print(model.summary())
-        return model
-
-class SimpleBiModelV1:
-    OTHER_INDICATORS = 7
-
-    def get_model(self, window_length, n_actions):
+class SimpleBiModel:
+    @staticmethod
+    def get_model(window_length, n_actions):
         h, w = INPUT_SHAPE
         obs_shape = (window_length, h + 1, w)
 
@@ -303,29 +183,79 @@ class SimpleBiModelV1:
             kernel_initializer=GlorotNormal(),
             name='output'
         )(conact)
-        model = Model(inputs=observation_input, outputs=out, name=MODEL_V1_NAME)
+        model = Model(inputs=observation_input, outputs=out, name=MODEL_NAME)
         print(model.summary())
         return model
 
+class TensorboardCallback(Callback):
+    def __init__(self, log_dir='tf_logs', mode='train'):
+        self.observations = {}
+        self.rewards = {}
+        self.actions = {}
+        self.metrics = {}
+        self.step = 0
+        logs = f'{log_dir}/{mode}'
+        self.mode = mode
+        self.writer = tf.summary.create_file_writer(logdir=logs)
 
-def get_observation_wrapper(model_name):
-    if model_name == MODEL_V2_NAME:
-        return CarObservationWrapperV2
-    if model_name == MODEL_V1_NAME:
-        return CarObservationWrapperV1
+    def on_train_begin(self, logs):
+        self.metrics_names = self.model.metrics_names
 
-def get_model_builder(model_name):
-    if model_name == MODEL_V2_NAME:
-        return SimpleBiModelV2
-    if model_name == MODEL_V1_NAME:
-        return SimpleBiModelV1
+    def on_train_end(self, logs):
+        self.writer.close()
+
+    def on_episode_begin(self, episode, logs):
+        """ Reset environment variables at beginning of each episode """
+        self.observations[episode] = []
+        self.rewards[episode] = []
+        self.actions[episode] = []
+        self.metrics[episode] = []
+
+    def on_episode_end(self, episode, logs):
+        """Report progress to Tensorboard"""
+        if self.mode == 'train':
+            metrics = np.array(self.metrics[episode])
+            with warnings.catch_warnings():
+                warnings.filterwarnings('error')
+                for idx, name in enumerate(self.metrics_names):
+                    try:
+                        value = np.nanmean(metrics[:, idx])
+                        self._log_scalars([(name, value)], episode=episode + 1)
+                    except Warning:
+                        pass
+        self._log_scalars(
+            logs=[('episode_reward', np.sum(self.rewards[episode])),
+                  ('reward_mean', np.mean(self.rewards[episode]))
+                  ],
+            episode=episode+1,
+        )
+
+        # Free up resources.
+        del self.observations[episode]
+        del self.rewards[episode]
+        del self.actions[episode]
+        del self.metrics[episode]
+
+    def _log_scalars(self, logs, episode):
+        with summary_ops_v2.always_record_summaries():
+            with self.writer.as_default():
+                for (name, value) in logs:
+                    tf.summary.scalar(name, value, step=episode)
+
+    def on_step_end(self, step, logs):
+        episode = logs['episode']
+        self.observations[episode].append(logs['observation'])
+        self.rewards[episode].append(logs['reward'])
+        self.actions[episode].append(logs['action'])
+        if self.mode == 'train':
+            self.metrics[episode].append(logs['metrics'])
+        self.step += 1
+
 
 # python utils/karas_model.py --steps=100
 # python utils/karas_model.py --mode=test --evaluation_episodes=2
 
 if __name__=="__main__":
-
-    disable_eager_execution()
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['train', 'test'], default='train')
@@ -337,33 +267,28 @@ if __name__=="__main__":
     parser.add_argument('--train_interval', type=int, default=TRAIN_INTERVAL)
     parser.add_argument('--steps', type=int, default=STEPS)
     parser.add_argument('--evaluation_episodes', type=int, default=EVALUATION_EPISODES)
-    parser.add_argument('--model', type=str, default=MODEL_V2_NAME)
     parser.add_argument('--load_weights_from', type=str, default=None)
     args = parser.parse_args()
 
-    model_name = args.model
-    print(f"Selected Model: {model_name}")
-    observation_wrapper = get_observation_wrapper(model_name)
-    model_builder = get_model_builder(model_name)
-
     env_name = 'CarRacing-v0'
-    env = CarActionWrapper(observation_wrapper(gym.make(env_name)))
+    env = CarActionWrapper(CarObservationWrapper(gym.make(env_name)))
 
     n_actions = len(CarActionWrapper.ACTIONS)
 
     policy = EpsGreedyQPolicy(eps=0.05)
-    '''LinearAnnealedPolicy(
-        EpsGreedyQPolicy(),
-        attr='eps',
-        value_max=1.,
-        value_min=.1,
-        value_test=.05,
-        nb_steps=1000000
-    )'''
 
     memory = SequentialMemory(limit=args.memory_limit, window_length=args.window_length)
 
-    model = model_builder().get_model(args.window_length, n_actions)
+    model = SimpleBiModel().get_model(args.window_length, n_actions)
+
+    tb_log_dir = 'tensorboard'
+    tb_logs = f'{tb_log_dir}/{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+    graph_dir = f'{tb_logs}/graph'
+    writer = tf.summary.create_file_writer(logdir=graph_dir)
+    # save the graph
+    with writer.as_default():
+        summary_ops_v2.graph(K.get_graph(), step=0)
+    writer.close()
 
     agent = DQNAgent(
         model=model,
@@ -387,25 +312,29 @@ if __name__=="__main__":
     if args.mode == 'train':
         import os
         current_directory = os.getcwd()
-        model_weight_dir = os.path.join(current_directory, model_name)
+        model_weight_dir = os.path.join(current_directory, MODEL_NAME)
         if not os.path.exists(model_weight_dir):
             os.makedirs(model_weight_dir)
 
-        # TODO add tensorboard callbacks
-        weights_filename = f'{model_name}/dqn_{env_name}_weights.h5f'
-        checkpoint_weights_filename = f'{model_name}/dqn_' + env_name + '_weights_{step}.h5f'
-        log_filename = f'{model_name}/' + 'dqn_{}_log.json'.format(env_name)
-        callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=100000)]
-        callbacks += [FileLogger(log_filename, interval=100)]
+        weights_filename = f'{MODEL_NAME}/dqn_{env_name}_weights.h5f'
+        checkpoint_weights_filename = f'{MODEL_NAME}/dqn_' + env_name + '_weights_{step}.h5f'
+        log_filename = f'{MODEL_NAME}/' + 'dqn_{}_log.json'.format(env_name)
+        callbacks = [
+            ModelIntervalCheckpoint(checkpoint_weights_filename, interval=100000),
+            FileLogger(log_filename, interval=100),
+            TensorboardCallback(log_dir=tb_logs)
+        ]
         agent.fit(env, callbacks=callbacks, nb_steps=args.steps, visualize=False, verbose=2)
         agent.save_weights(weights_filename, overwrite=True)
 
-        agent.test(env, nb_episodes=args.evaluation_episodes, visualize=False)
+        callbacks = [TensorboardCallback(log_dir=tb_logs, mode='test')]
+        agent.test(env, nb_episodes=args.evaluation_episodes, visualize=False, callbacks=callbacks)
         env.close()
 
     elif args.mode == 'test':
-        weight_dir = args.load_weights_from or model_name
+        weight_dir = args.load_weights_from or MODEL_NAME
         weights_filename = f'{weight_dir}/' + 'dqn_{}_weights.h5f'.format(env_name)
         agent.load_weights(weights_filename)
-        agent.test(env, nb_episodes=args.evaluation_episodes, visualize=True)
+        callbacks = [TensorboardCallback(log_dir=tb_logs, mode='test')]
+        agent.test(env, nb_episodes=args.evaluation_episodes, visualize=True, callbacks=callbacks)
         env.close()
