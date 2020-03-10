@@ -32,9 +32,17 @@ EVALUATION_EPISODES = 5
 MODEL_NAME = 'simple_bi_model'
 
 def grayscale_img(image):
+    """
+    Converts a color image to grayscale numpy array
+    """
     return np.dot(image[..., :3], [0.299, 0.587, 0.114])
 
 def get_bottom_bar_indicators(img):
+    """
+    Converts visual bar graphs of true speed, four ABS sensors, steering wheel position and velocity 
+    at the bottom of screen to average values in a numpy array. 
+
+    """
     h, w, _ = img.shape
     s = int(w / 40.0)
 
@@ -75,12 +83,16 @@ def get_bottom_bar_indicators(img):
 
 
 class CarActionWrapper(ActionWrapper):
+    """
+    Wrapper with possible actions the car can make at each step.
+    Do noting, turn left, turn right, accelerate and brake.
+    """
     ACTIONS = [
             [0.0, 0.0, 0.0],  # Nothing
             [-1.0, 0.0, 0.0],  # Left
             [1.0, 0.0, 0.0],  # Right
             [0.0, 1.0, 0.0],  # Accelerate
-            [0.0, 0.0, 0.8],  # break
+            [0.0, 0.0, 0.8],  # Brake
         ]
     def __init__(self, env):
         super(CarActionWrapper, self).__init__(env)
@@ -88,9 +100,6 @@ class CarActionWrapper(ActionWrapper):
 
     def action(self, action):
         return self.ACTIONS[action]
-
-    def reverse_action(self, action):
-        pass
 
 class CarObservationWrapper(ObservationWrapper):
     OTHER_INDICATORS = 7
@@ -114,6 +123,13 @@ class CarObservationWrapper(ObservationWrapper):
         return np.vstack([image, other_info])
 
 class SimpleBiModel:
+    """
+    Building the model:
+        Output image is cropped into a track image and a indicators image.
+        The track image is moved through three convolutional layers, then flattened, before being put though a dense layer.
+        The indicator image is put through three dense layers, then flattened before being concatenated with the track image.
+        
+    """
     @staticmethod
     def get_model(window_length, n_actions):
         h, w = INPUT_SHAPE
@@ -125,9 +141,9 @@ class SimpleBiModel:
         )
         permute = Permute(dims=(2, 3, 1), name='permute_dims')(observation_input)
 
-        image_slice = Cropping2D(cropping=((0, 1), (0, 0)), name='crop_image')(permute)
-        other_slice = Cropping2D(cropping=((h, 0), (0, 0)), name='crop_indicators')(permute)
-
+        image_slice = Cropping2D(cropping=((0, 1), (0, 0)), name='crop_image')(permute) # track image
+        other_slice = Cropping2D(cropping=((h, 0), (0, 0)), name='crop_indicators')(permute) # indicators at bottom of screen
+        
         image_slice = Convolution2D(
             filters=32,
             kernel_size=(8, 8),
@@ -188,6 +204,9 @@ class SimpleBiModel:
         return model
 
 class TensorboardCallback(Callback):
+    """
+    Logging metrics for Tensorboard
+    """
     def __init__(self, log_dir='tf_logs', mode='train'):
         self.observations = {}
         self.rewards = {}
