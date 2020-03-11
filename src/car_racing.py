@@ -1,3 +1,4 @@
+import os
 import argparse
 from datetime import datetime
 import warnings
@@ -5,6 +6,7 @@ import warnings
 import gym
 from gym import ActionWrapper, ObservationWrapper
 from gym.spaces import Discrete, Box
+from gym.wrappers import Monitor
 import numpy as np
 from rl.agents.dqn import DQNAgent
 from rl.callbacks import FileLogger, ModelIntervalCheckpoint, Callback
@@ -33,6 +35,17 @@ MODEL_NAME = 'simple_bi_model'
 
 def grayscale_img(image):
     return np.dot(image[..., :3], [0.299, 0.587, 0.114])
+
+
+def gen_videos(agent, checkpoints):
+
+    for i in len(checkpoints):
+        point = checkpoints[i]
+        env_name = 'CarRacing-v0'
+        env = Monitor(CarActionWrapper(CarObservationWrapper(gym.make(env_name))),
+                      'monitor_files_'+str(i), force=True, video_callable=lambda x: episode_id,
+                      write_upon_reset=True)
+
 
 def get_bottom_bar_indicators(img):
     h, w, _ = img.shape
@@ -258,7 +271,7 @@ class TensorboardCallback(Callback):
 if __name__=="__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=['train', 'test'], default='train')
+    parser.add_argument('--mode', choices=['train', 'test', 'record'], default='train')
     parser.add_argument('--window_length', type=int, default=WINDOW_LENGTH)
     parser.add_argument('--memory_limit', type=int, default=MEMORY_LIMIT)
     parser.add_argument('--warmup_steps', type=int, default=WARMUP_STEPS)
@@ -304,7 +317,7 @@ if __name__=="__main__":
 
     agent.compile(Adam(lr=args.learning_rate), metrics=['mae'])
 
-    if args.load_weights_from is not None:
+    if args.load_weights_from is not None and args.mode != 'record':
         print(f"Loading Weights From: {args.load_weights_from}")
         weights_filename = f'{args.load_weights_from}/' + 'dqn_{}_weights.h5f'.format(env_name)
         agent.load_weights(weights_filename)
@@ -334,7 +347,21 @@ if __name__=="__main__":
     elif args.mode == 'test':
         weight_dir = args.load_weights_from or MODEL_NAME
         weights_filename = f'{weight_dir}/' + 'dqn_{}_weights.h5f'.format(env_name)
+        print(weights_filename)
         agent.load_weights(weights_filename)
         callbacks = [TensorboardCallback(log_dir=tb_logs, mode='test')]
         agent.test(env, nb_episodes=args.evaluation_episodes, visualize=True, callbacks=callbacks)
         env.close()
+
+    elif args.mode == 'record':
+        weight_dir = args.load_weights_from
+        for sub_dir in os.listdir(weight_dir):
+            if sub_dir != '.DS_Store':
+                weights_filename = f'{weight_dir}/' + f'{sub_dir}/' + 'dqn_{}_weights.h5f'.format(env_name)
+                print(weights_filename)
+                agent.load_weights(weights_filename)
+                callbacks = [TensorboardCallback(log_dir=tb_logs, mode='test')]
+                env = Monitor(env, 'monitor_files_'+sub_dir, force=True, uid=True,
+                              video_callable=lambda episode_id: True, write_upon_reset=True)
+                agent.test(env, nb_episodes=args.evaluation_episodes, visualize=False, callbacks=callbacks)
+                env.close()
