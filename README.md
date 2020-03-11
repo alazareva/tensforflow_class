@@ -30,7 +30,7 @@ python src/car_racing.py
 
 ### Available arguments:  
 ```bash
---mode # choices=['train', 'test']
+--mode # choices=['train', 'test', 'record']
 --window_length # The length of the filter window. Must be a positive integer
 --memory_limit  # In bytes (?????)
 --warmup_steps  # Lower learning rate during the warmup steps.
@@ -38,7 +38,7 @@ python src/car_racing.py
 --learning_rate  # Set the learning rate.
 --train_interval  # How many steps before the model re-fits the neural network
 --steps  # Number of total training steps
---evaluation_episodes  # ?????
+--evaluation_episodes  # Total number of test episodes.
 --load_weights_from  # Load weights from a previous run.
 ```
 
