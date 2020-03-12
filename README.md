@@ -43,7 +43,7 @@ python src/car_racing.py
 ```
 
 **Training the Model**  
-For example, the following arguments will train the model with a limit of 10,000 steps, with 500 warmup steps during which the learning rate is lowered, and loading weights from a previous run/model. 
+For example, the following arguments will train the model with a limit of 10,000 steps, with 500 warmup steps, and loading weights from a previous run/model. 
 ```bash
 python src/car_racing.py --steps=10000 --warmup_steps=500 --load_weights_from=model_1000 --mode=train
 ```
