@@ -291,7 +291,7 @@ if __name__=="__main__":
     parser.add_argument('--mode', choices=['train', 'test', 'record'], default='train') # Setting mode, train, test, or record
     parser.add_argument('--window_length', type=int, default=WINDOW_LENGTH) # Length of the experience replay window.
     parser.add_argument('--memory_limit', type=int, default=MEMORY_LIMIT)  # Limit of how many observations, action, rewards and terminal states to store.
-    parser.add_argument('--warmup_steps', type=int, default=WARMUP_STEPS)  # Lower learning rate during the warmup steps.
+    parser.add_argument('--warmup_steps', type=int, default=WARMUP_STEPS)  # Number of warm-up steps before learning occurs.
     parser.add_argument('--target_model_update', type=int, default=TARGET_MODEL_UPDATE) # Controls how often the target network is updated (n'th step).
     parser.add_argument('--learning_rate', type=float, default=LEARNING_RATE) # Set the learning rate.
     parser.add_argument('--train_interval', type=int, default=TRAIN_INTERVAL) # How many steps before the model re-fits the neural network
