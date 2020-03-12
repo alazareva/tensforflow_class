@@ -74,7 +74,3 @@ Up Arrow - Accelerate
 Down Arrow - Brake   
 Left Arrow - Left turn  
 Right Arrow - Right turn  
-
-
-# Any other details that you think might be useful
-Do we need to cite pieces of work we used/incorporated/found helpful?
