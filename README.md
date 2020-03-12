@@ -53,7 +53,7 @@ To run TensorBoard, run the following command on a new python terminal. TensorBo
 tensorboard --logdir='./src/tensorboard/xxxxxxxx-xxxxxx' 
 ```
 
-### Human player control:
+### Human control:
 The following code will allow a human player to play the game:  
 **Controls:**  
 Up Arrow - Accelerate  
