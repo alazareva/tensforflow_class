@@ -15,9 +15,8 @@ keras-rl2==1.0.3
 conda install python=3.7  
 pip install gym  
 pip install gym[all]  
-pip install keras-rl2 #Will install the correct compatible version of TensorFlow (2.0.0b1)  
+pip install keras-rl2 # Will install the correct compatible version of TensorFlow (2.0.0b1)  
 pip install tensorboard==2.0.0  
-
 
 
 # The sequence of how the code needs to be executed: 
@@ -27,22 +26,41 @@ python src/car_racing.py
 
 
 ### Available arguments:  
-
---mode # choices=['train', 'test']
---window_length # The length of the filter window. Must be a positive integer
---memory_limit  # In bytes (?????)
---warmup_steps  # Lower learning rate during the warmup steps.
+--mode # choices=['train', 'test', 'record'] # Record will make a video of the runs
+--window_length # Length of the experience replay window.
+--memory_limit  # Limit of how many observations, action, rewards and terminal states to store.
+--warmup_steps  # Number of warm-up steps before learning occurs.
 --target_model_update  # Controls how often the target network is updated (n'th step). 
 --learning_rate  # Set the learning rate.
 --train_interval  # How many steps before the model re-fits the neural network
 --steps  # Number of total training steps
---evaluation_episodes  # ?????
+--evaluation_episodes  # Total number of test episodes.
 --load_weights_from  # Load weights from a previous run.
 
 
-For example, the following arguments will run the code with a limit of 10,000 steps, with 500 warmup steps during which the learning rate is lowered, and loading weights from a previous run/model. 
 
-python src/car_racing.py  --steps=10000 --warmup_steps=500 --load_weights_from=pretrained_model_v1
+**Training the Model**  
+For example, the following arguments will train the model with a limit of 10,000 steps, with 500 warmup steps, and loading weights from a previous run/model. 
 
-# Any other details that you think might be useful
-Do we need to cite pieces of work we used/incorporated/found helpful?
+python src/car_racing.py --steps=10000 --warmup_steps=500 --load_weights_from=model_1000 --mode=train
+
+
+**Testing the Model**
+python src/car_racing.py --load_weights_from=model_1000 --evaluation_episodes=10 --mode=test 
+
+### TensorBoard:
+To run TensorBoard, run the following command on a new python terminal. TensorBoard files can be found in /tensorboard.
+
+tensorboard --logdir=tensorboard
+
+
+### Human control:
+The following code will allow a human player to play the game:  
+
+python -m gym.envs.box2d.car_racing  
+
+Controls: 
+Up Arrow - Accelerate  
+Down Arrow - Brake   
+Left Arrow - Left turn  
+Right Arrow - Right turn
