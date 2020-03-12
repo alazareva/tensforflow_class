@@ -46,7 +46,7 @@ python src/car_racing.py  --steps=10000 --warmup_steps=500 --load_weights_from=p
 ### TensorBoard:
 To run TensorBoard, run the following command on a new python terminal. TensorBoard files can be found in /src/tensorboard/[date]-[time]/.
 
-tensorboard --logdir='./src/tensorboard/xxxxxxxx-xxxxxx' 
+tensorboard --logdir=tensorboard
 
 
 ### Human control:
