@@ -21,6 +21,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras import backend as K
 from tensorflow.python.ops import summary_ops_v2
 
+# default parameters
 INPUT_SHAPE = (96, 96)
 WINDOW_LENGTH = 10
 MEMORY_LIMIT = 1000000
@@ -31,6 +32,7 @@ TRAIN_INTERVAL = 4
 STEPS = 1750000
 EVALUATION_EPISODES = 5
 
+# Name of model
 MODEL_NAME = 'simple_bi_model'
 
 def grayscale_img(image):
