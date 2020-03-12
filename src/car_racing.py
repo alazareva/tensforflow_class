@@ -46,7 +46,6 @@ def get_bottom_bar_indicators(img):
     """
     Converts visual bar graphs of true speed, four ABS sensors, steering wheel position and velocity 
     at the bottom of screen to average values in a numpy array. 
-
     """
     h, w, _ = img.shape
     s = int(w / 40.0)
