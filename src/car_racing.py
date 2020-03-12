@@ -106,6 +106,9 @@ class CarActionWrapper(ActionWrapper):
         return self.ACTIONS[action]
 
 class CarObservationWrapper(ObservationWrapper):
+    """
+    Preprocessing - Wrapper with the car's current state, cropped, grayscaled, and then monochrome
+    """
     OTHER_INDICATORS = 7
 
     def __index__(self, env):
