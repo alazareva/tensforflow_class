@@ -26,7 +26,7 @@ python src/car_racing.py
 
 
 ### Available arguments:  
---mode # choices=['train', 'test', 'record']
+--mode # choices=['train', 'test', 'record'] # Record will make a video of the runs
 --window_length # Length of the experience replay window.
 --memory_limit  # Limit of how many observations, action, rewards and terminal states to store.
 --warmup_steps  # Lower learning rate during the warmup steps.
