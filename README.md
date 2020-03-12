@@ -66,14 +66,14 @@ tensorboard --logdir=tensorboard
 
 ### Human control:
 The following code will allow a human player to play the game:  
+```bash
+python -m gym.envs.box2d.car_racing  
+```
 **Controls:**  
 Up Arrow - Accelerate  
 Down Arrow - Brake   
 Left Arrow - Left turn  
 Right Arrow - Right turn  
-```bash
-python -m gym.envs.box2d.car_racing  
-```
 
 
 # Any other details that you think might be useful
