@@ -264,6 +264,7 @@ class TensorboardCallback(Callback):
                 for (name, value) in logs:
                     tf.summary.scalar(name, value, step=episode)
 
+    # Append metrics when a step ends
     def on_step_end(self, step, logs):
         episode = logs['episode']
         self.observations[episode].append(logs['observation'])
@@ -275,31 +276,38 @@ class TensorboardCallback(Callback):
 
 
 if __name__=="__main__":
-
+    
+    # Available arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['train', 'test', 'record'], default='train')
-    parser.add_argument('--window_length', type=int, default=WINDOW_LENGTH)
-    parser.add_argument('--memory_limit', type=int, default=MEMORY_LIMIT)
-    parser.add_argument('--warmup_steps', type=int, default=WARMUP_STEPS)
-    parser.add_argument('--target_model_update', type=int, default=TARGET_MODEL_UPDATE)
-    parser.add_argument('--learning_rate', type=float, default=LEARNING_RATE)
-    parser.add_argument('--train_interval', type=int, default=TRAIN_INTERVAL)
-    parser.add_argument('--steps', type=int, default=STEPS)
-    parser.add_argument('--evaluation_episodes', type=int, default=EVALUATION_EPISODES)
-    parser.add_argument('--load_weights_from', type=str, default=None)
+    parser.add_argument('--window_length', type=int, default=WINDOW_LENGTH) # Length of the experience replay window.
+    parser.add_argument('--memory_limit', type=int, default=MEMORY_LIMIT) # Limit of how many observations, action, rewards and terminal states to store.
+    parser.add_argument('--warmup_steps', type=int, default=WARMUP_STEPS) # Lower learning rate during the warmup steps.
+    parser.add_argument('--target_model_update', type=int, default=TARGET_MODEL_UPDATE) # Controls how often the target network is updated (n'th step). 
+    parser.add_argument('--learning_rate', type=float, default=LEARNING_RATE) # Set the learning rate.
+    parser.add_argument('--train_interval', type=int, default=TRAIN_INTERVAL) # How many steps before the model re-fits the neural network
+    parser.add_argument('--steps', type=int, default=STEPS) # Number of total training steps
+    parser.add_argument('--evaluation_episodes', type=int, default=EVALUATION_EPISODES) # Total number of test episodes.
+    parser.add_argument('--load_weights_from', type=str, default=None) # Load weights from a previous run.
     args = parser.parse_args()
 
+    # Setting the environment
     env_name = 'CarRacing-v0'
     env = CarActionWrapper(CarObservationWrapper(gym.make(env_name)))
-
+    
+    # Number of actions
     n_actions = len(CarActionWrapper.ACTIONS)
 
+    # Percentage of time the agent will take random action
     policy = EpsGreedyQPolicy(eps=0.05)
 
+    # Memory buffer
     memory = SequentialMemory(limit=args.memory_limit, window_length=args.window_length)
 
+    # Selecting the model, setting window length and number of actions
     model = SimpleBiModel().get_model(args.window_length, n_actions)
 
+    # Setting tensorboard output location
     tb_log_dir = 'tensorboard'
     tb_logs = f'{tb_log_dir}/{datetime.now().strftime("%Y%m%d-%H%M%S")}'
     graph_dir = f'{tb_logs}/graph'
@@ -309,6 +317,7 @@ if __name__=="__main__":
         summary_ops_v2.graph(K.get_graph(), step=0)
     writer.close()
 
+    # Hyperparameters of the agent
     agent = DQNAgent(
         model=model,
         nb_actions=n_actions,
@@ -321,36 +330,46 @@ if __name__=="__main__":
         delta_clip=1.,
         enable_dueling_network=True)
 
+    # Compile/initialize agent 
     agent.compile(Adam(lr=args.learning_rate), metrics=['mae'])
 
+    # Loading weights from a previous run, if selected.
     if args.load_weights_from is not None and args.mode != 'record':
         print(f"Loading Weights From: {args.load_weights_from}")
         weights_filename = f'{args.load_weights_from}/' + 'dqn_{}_weights.h5f'.format(env_name)
         agent.load_weights(weights_filename)
 
+    # Training mode
     if args.mode == 'train':
+        # Making sure the weight directory exists for writing, if not create one
         import os
         current_directory = os.getcwd()
         model_weight_dir = os.path.join(current_directory, MODEL_NAME)
         if not os.path.exists(model_weight_dir):
             os.makedirs(model_weight_dir)
 
+        # Naming of weight output
         weights_filename = f'{MODEL_NAME}/dqn_{env_name}_weights.h5f'
         checkpoint_weights_filename = f'{MODEL_NAME}/dqn_' + env_name + '_weights_{step}.h5f'
         log_filename = f'{MODEL_NAME}/' + 'dqn_{}_log.json'.format(env_name)
+        
+        # How frequently to save weights
         callbacks = [
             ModelIntervalCheckpoint(checkpoint_weights_filename, interval=100000),
             FileLogger(log_filename, interval=100),
             TensorboardCallback(log_dir=tb_logs)
         ]
+        # Running the agent
         agent.fit(env, callbacks=callbacks, nb_steps=args.steps, visualize=False, verbose=2)
         agent.save_weights(weights_filename, overwrite=True)
-
+        # Saving tensorboard metrics
         callbacks = [TensorboardCallback(log_dir=tb_logs, mode='test')]
         agent.test(env, nb_episodes=args.evaluation_episodes, visualize=False, callbacks=callbacks)
         env.close()
 
+    # Test mode
     elif args.mode == 'test':
+        # Loading weights from previous run or from currrent model
         weight_dir = args.load_weights_from or MODEL_NAME
         weights_filename = f'{weight_dir}/' + 'dqn_{}_weights.h5f'.format(env_name)
         agent.load_weights(weights_filename)
@@ -358,6 +377,7 @@ if __name__=="__main__":
         agent.test(env, nb_episodes=args.evaluation_episodes, visualize=True, callbacks=callbacks)
         env.close()
 
+    # Recording mode
     elif args.mode == 'record':
         weight_dir = args.load_weights_from
         for sub_dir in os.listdir(weight_dir):
@@ -366,6 +386,7 @@ if __name__=="__main__":
                 print(weights_filename)
                 agent.load_weights(weights_filename)
                 callbacks = [TensorboardCallback(log_dir=tb_logs, mode='test')]
+                # Recording video model
                 env = Monitor(env, 'monitor_files_'+sub_dir, force=True, uid=True,
                               video_callable=lambda episode_id: True, write_upon_reset=True)
                 agent.test(env, nb_episodes=args.evaluation_episodes, visualize=False, callbacks=callbacks)
