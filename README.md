@@ -33,7 +33,7 @@ python src/car_racing.py
 --mode # choices=['train', 'test', 'record'] # Record will make a video of the runs
 --window_length # Length of the experience replay window.
 --memory_limit  # Limit of how many observations, action, rewards and terminal states to store.
---warmup_steps  # Lower learning rate during the warmup steps.
+--warmup_steps  # Number of warm-up steps before learning occurs.
 --target_model_update  # Controls how often the target network is updated (n'th step). 
 --learning_rate  # Set the learning rate.
 --train_interval  # How many steps before the model re-fits the neural network
@@ -59,7 +59,7 @@ python src/car_racing.py --load_weights_from=model_1000 --evaluation_episodes=3 
 ```
 
 ### TensorBoard:
-To run TensorBoard, run the following command on a new python terminal. TensorBoard files can be found in /src/tensorboard.
+To run TensorBoard, run the following command on a new python terminal. TensorBoard files can be found in /tensorboard.
 ```bash
 tensorboard --logdir=tensorboard 
 ```
