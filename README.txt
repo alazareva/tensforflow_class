@@ -49,10 +49,6 @@ python src/car_racing.py --steps=10000 --warmup_steps=500 --load_weights_from=mo
 **Testing the Model**
 python src/car_racing.py --load_weights_from=model_1000 --evaluation_episodes=10 --mode=test 
 
-**Recording the Model**
-python src/car_racing.py --load_weights_from=model_1000 --evaluation_episodes=3 --mode=record 
-
-
 ### TensorBoard:
 To run TensorBoard, run the following command on a new python terminal. TensorBoard files can be found in /tensorboard.
 
