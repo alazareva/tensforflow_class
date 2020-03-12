@@ -27,7 +27,7 @@ python src/car_racing.py
 
 ### Available arguments:  
 --mode # choices=['train', 'test', 'record']
---window_length # The length of the filter window. Must be a positive integer
+--window_length # Length of the experience replay window.
 --memory_limit  # Limit of how many observations, action, rewards and terminal states to store.
 --warmup_steps  # Lower learning rate during the warmup steps.
 --target_model_update  # Controls how often the target network is updated (n'th step). 
