@@ -4,7 +4,7 @@ from datetime import datetime
 import warnings
 
 import gym
-from gym import ActionWrapper, ObservationWrapper
+from gym import ActionWrapper, ObservationWrapper, RewardWrapper
 from gym.spaces import Discrete, Box
 from gym.wrappers import Monitor
 import numpy as np
@@ -124,6 +124,11 @@ class CarObservationWrapper(ObservationWrapper):
         padding = np.zeros(image.shape[1] - indicators.shape[0])
         other_info = np.concatenate([padding, indicators])
         return np.vstack([image, other_info])
+
+class CarRewardWrapper(RewardWrapper):
+
+    def reward(self, reward):
+        return min(reward, 1)
 
 class SimpleBiModel:
     """
@@ -287,10 +292,13 @@ if __name__=="__main__":
     parser.add_argument('--steps', type=int, default=STEPS)
     parser.add_argument('--evaluation_episodes', type=int, default=EVALUATION_EPISODES)
     parser.add_argument('--load_weights_from', type=str, default=None)
+    parser.add_argument('--save_dir', type=str, default=MODEL_NAME)
     args = parser.parse_args()
 
     env_name = 'CarRacing-v0'
     env = CarActionWrapper(CarObservationWrapper(gym.make(env_name)))
+    if args.mode == 'train':
+        env = CarRewardWrapper(env)
 
     n_actions = len(CarActionWrapper.ACTIONS)
 
@@ -331,13 +339,13 @@ if __name__=="__main__":
     if args.mode == 'train':
         import os
         current_directory = os.getcwd()
-        model_weight_dir = os.path.join(current_directory, MODEL_NAME)
+        model_weight_dir = os.path.join(current_directory, args.save_dir)
         if not os.path.exists(model_weight_dir):
             os.makedirs(model_weight_dir)
 
-        weights_filename = f'{MODEL_NAME}/dqn_{env_name}_weights.h5f'
-        checkpoint_weights_filename = f'{MODEL_NAME}/dqn_' + env_name + '_weights_{step}.h5f'
-        log_filename = f'{MODEL_NAME}/' + 'dqn_{}_log.json'.format(env_name)
+        weights_filename = f'{args.save_dir}/dqn_{env_name}_weights.h5f'
+        checkpoint_weights_filename = f'{args.save_dir}/dqn_' + env_name + '_weights_{step}.h5f'
+        log_filename = f'{args.save_dir}/' + 'dqn_{}_log.json'.format(env_name)
         callbacks = [
             ModelIntervalCheckpoint(checkpoint_weights_filename, interval=100000),
             FileLogger(log_filename, interval=100),
@@ -351,9 +359,6 @@ if __name__=="__main__":
         env.close()
 
     elif args.mode == 'test':
-        weight_dir = args.load_weights_from or MODEL_NAME
-        weights_filename = f'{weight_dir}/' + 'dqn_{}_weights.h5f'.format(env_name)
-        agent.load_weights(weights_filename)
         callbacks = [TensorboardCallback(log_dir=tb_logs, mode='test')]
         agent.test(env, nb_episodes=args.evaluation_episodes, visualize=True, callbacks=callbacks)
         env.close()
