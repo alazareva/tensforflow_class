@@ -4,7 +4,7 @@ from datetime import datetime
 import warnings
 
 import gym
-from gym import ActionWrapper, ObservationWrapper
+from gym import ActionWrapper, ObservationWrapper, RewardWrapper
 from gym.spaces import Discrete, Box
 from gym.wrappers import Monitor
 import numpy as np
@@ -52,6 +52,7 @@ def get_bottom_bar_indicators(img):
 
     bottom = grayscale_img(img[84:, :])
     threshold = 20
+    # Converting image to monochrome
     black_and_white = (bottom > threshold).astype('uint8') * 255
     x_start = 5 * s
     x_end = (x_start + 1) * s
@@ -129,13 +130,17 @@ class CarObservationWrapper(ObservationWrapper):
         other_info = np.concatenate([padding, indicators])
         return np.vstack([image, other_info])
 
+class CarRewardWrapper(RewardWrapper):
+
+    def reward(self, reward):
+        return min(reward, 1)
+
 class SimpleBiModel:
     """
     Building the model:
         Output image is cropped into a track image and a indicators image.
         The track image is moved through three convolutional layers, then flattened, before being put though a dense layer.
         The indicator image is put through three dense layers, then flattened before being concatenated with the track image.
-        
     """
     @staticmethod
     def get_model(window_length, n_actions):
@@ -283,23 +288,28 @@ if __name__=="__main__":
     
     # Available arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=['train', 'test', 'record'], default='train')
+    parser.add_argument('--mode', choices=['train', 'test', 'record'], default='train') # Setting mode, train, test, or record
     parser.add_argument('--window_length', type=int, default=WINDOW_LENGTH) # Length of the experience replay window.
-    parser.add_argument('--memory_limit', type=int, default=MEMORY_LIMIT) # Limit of how many observations, action, rewards and terminal states to store.
-    parser.add_argument('--warmup_steps', type=int, default=WARMUP_STEPS) # Lower learning rate during the warmup steps.
-    parser.add_argument('--target_model_update', type=int, default=TARGET_MODEL_UPDATE) # Controls how often the target network is updated (n'th step). 
+    parser.add_argument('--memory_limit', type=int, default=MEMORY_LIMIT)  # Limit of how many observations, action, rewards and terminal states to store.
+    parser.add_argument('--warmup_steps', type=int, default=WARMUP_STEPS)  # Lower learning rate during the warmup steps.
+    parser.add_argument('--target_model_update', type=int, default=TARGET_MODEL_UPDATE) # Controls how often the target network is updated (n'th step).
     parser.add_argument('--learning_rate', type=float, default=LEARNING_RATE) # Set the learning rate.
     parser.add_argument('--train_interval', type=int, default=TRAIN_INTERVAL) # How many steps before the model re-fits the neural network
     parser.add_argument('--steps', type=int, default=STEPS) # Number of total training steps
     parser.add_argument('--evaluation_episodes', type=int, default=EVALUATION_EPISODES) # Total number of test episodes.
     parser.add_argument('--load_weights_from', type=str, default=None) # Load weights from a previous run.
+    parser.add_argument('--save_dir', type=str, default=MODEL_NAME)
     args = parser.parse_args()
 
     # Setting the environment
     env_name = 'CarRacing-v0'
     env = CarActionWrapper(CarObservationWrapper(gym.make(env_name)))
-    
-    # Number of actions
+
+    # Setting the environment
+    if args.mode == 'train':
+        env = CarRewardWrapper(env)
+        
+    # Number of actions    
     n_actions = len(CarActionWrapper.ACTIONS)
 
     # Percentage of time the agent will take random action
@@ -346,16 +356,15 @@ if __name__=="__main__":
     # Training mode
     if args.mode == 'train':
         # Making sure the weight directory exists for writing, if not create one
-        import os
         current_directory = os.getcwd()
-        model_weight_dir = os.path.join(current_directory, MODEL_NAME)
+        model_weight_dir = os.path.join(current_directory, args.save_dir)
         if not os.path.exists(model_weight_dir):
             os.makedirs(model_weight_dir)
 
         # Naming of weight output
-        weights_filename = f'{MODEL_NAME}/dqn_{env_name}_weights.h5f'
-        checkpoint_weights_filename = f'{MODEL_NAME}/dqn_' + env_name + '_weights_{step}.h5f'
-        log_filename = f'{MODEL_NAME}/' + 'dqn_{}_log.json'.format(env_name)
+        weights_filename = f'{args.save_dir}/dqn_{env_name}_weights.h5f'
+        checkpoint_weights_filename = f'{args.save_dir}/dqn_' + env_name + '_weights_{step}.h5f'
+        log_filename = f'{args.save_dir}/' + 'dqn_{}_log.json'.format(env_name)
         
         # How frequently to save weights
         callbacks = [
@@ -373,10 +382,6 @@ if __name__=="__main__":
 
     # Test mode
     elif args.mode == 'test':
-        # Loading weights from previous run or from currrent model
-        weight_dir = args.load_weights_from or MODEL_NAME
-        weights_filename = f'{weight_dir}/' + 'dqn_{}_weights.h5f'.format(env_name)
-        agent.load_weights(weights_filename)
         callbacks = [TensorboardCallback(log_dir=tb_logs, mode='test')]
         agent.test(env, nb_episodes=args.evaluation_episodes, visualize=True, callbacks=callbacks)
         env.close()
